@@ -62,20 +62,26 @@ module Toml.Bi.Map
 
          -- * Useful utility functions
        , toMArray
+
+         -- * Helpers for Generic deriving
+       , HasBiMap (..)
+       , IsTomlPrim
+       , CodecWrapper
        ) where
 
 import Control.Arrow ((>>>))
-import Control.Monad ((>=>))
-
 import Control.DeepSeq (NFData)
+import Control.Monad ((>=>))
 import Data.Bifunctor (bimap, first)
 import Data.ByteString (ByteString)
 import Data.Hashable (Hashable)
+import Data.Kind (Type)
 import Data.Semigroup (Semigroup (..))
 import Data.Text (Text)
 import Data.Time (Day, LocalTime, TimeOfDay, ZonedTime)
 import Data.Word (Word)
 import GHC.Generics (Generic)
+import GHC.TypeLits (Nat, Symbol)
 import Numeric.Natural (Natural)
 import Text.Read (readEither)
 
@@ -469,3 +475,80 @@ _IntSet = iso IS.toList IS.fromList >>> _Array _Int
 
 tShow :: Show a => a -> Text
 tShow = T.pack . show
+
+{- | Helper typeclass for generic deriving. You can use this typeclass for
+writing your custom codecs but this is less convenient and generally not
+encouraged.
+-}
+class HasBiMap a where
+    hasBiMap :: TomlBiMap a AnyValue
+
+instance HasBiMap Bool      where hasBiMap = _Bool
+instance HasBiMap Int       where hasBiMap = _Int
+instance HasBiMap Word      where hasBiMap = _Word
+instance HasBiMap Integer   where hasBiMap = _Integer
+instance HasBiMap Natural   where hasBiMap = _Natural
+instance HasBiMap Double    where hasBiMap = _Double
+instance HasBiMap Float     where hasBiMap = _Float
+instance HasBiMap Text      where hasBiMap = _Text
+instance HasBiMap TL.Text   where hasBiMap = _LText
+instance HasBiMap ZonedTime where hasBiMap = _ZonedTime
+instance HasBiMap LocalTime where hasBiMap = _LocalTime
+instance HasBiMap Day       where hasBiMap = _Day
+instance HasBiMap TimeOfDay where hasBiMap = _TimeOfDay
+instance HasBiMap IS.IntSet where hasBiMap = _IntSet
+
+instance HasBiMap a => HasBiMap [a] where
+    hasBiMap = _Array (hasBiMap @a)
+
+instance HasBiMap a => HasBiMap (NE.NonEmpty a) where
+    hasBiMap = _NonEmpty (hasBiMap @a)
+
+instance (HasBiMap a, Ord a) => HasBiMap (S.Set a) where
+    hasBiMap = _Set (hasBiMap @a)
+
+instance (HasBiMap a, Eq a, Hashable a) => HasBiMap (HS.HashSet a) where
+    hasBiMap = _HashSet (hasBiMap @a)
+
+-- instance HasCodec a => HasCodec (Maybe a) where
+--     hasCodec = dioptional . hasCodec @a
+--
+-- instance HasCodec a => HasCodec [a] where
+--     hasCodec = list (hasCodec @a)
+
+{- | Helper type family to detect whether the data type is primitive TOML value
+or custom user data type. We don't know all types in advance but we do know all
+types of primitive values.
+
+The type family returns @0@ for primitive values and something else otherwise.
+-}
+type family IsTomlPrim (a :: Type) :: Nat where
+    IsTomlPrim Bool      = 0
+    IsTomlPrim Int       = 0
+    IsTomlPrim Word      = 0
+    IsTomlPrim Integer   = 0
+    IsTomlPrim Natural   = 0
+    IsTomlPrim Double    = 0
+    IsTomlPrim Float     = 0
+    IsTomlPrim Text      = 0
+    IsTomlPrim TL.Text   = 0
+    IsTomlPrim ZonedTime = 0
+    IsTomlPrim LocalTime = 0
+    IsTomlPrim Day       = 0
+    IsTomlPrim TimeOfDay = 0
+    IsTomlPrim a         = 1
+
+{- | Defines what wrappers to use for different types. We need to use different
+combinators for different types. The purpose of this type family is to map type
+to runtime value which can be used in pattern-matching later to decide what to
+do. The strategy is the following:
+
+1. Use 'dioptional' for 'Maybe'.
+2. Use 'list' for list of values.
+3. Use 'table' for other types. It's not safe to use 'table' for everything, but
+  'IsTomlPrim' type family must be used first.
+-}
+type family CodecWrapper (a :: Type) :: Symbol where
+    CodecWrapper (Maybe a) = "maybe"
+    CodecWrapper [a]       = "list"
+    CodecWrapper a         = "table"

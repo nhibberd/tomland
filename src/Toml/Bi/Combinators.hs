@@ -61,25 +61,27 @@ import Data.HashSet (HashSet)
 import Data.IntSet (IntSet)
 import Data.List.NonEmpty (NonEmpty (..), toList)
 import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy (..))
 import Data.Semigroup ((<>))
 import Data.Set (Set)
 import Data.Text (Text)
 import Data.Time (Day, LocalTime, TimeOfDay, ZonedTime)
 import Data.Word (Word)
+import GHC.TypeNats (KnownNat, Nat, natVal)
 import Numeric.Natural (Natural)
 
 import Toml.Bi.Code (DecodeException (..), Env, St, TomlCodec, execTomlCodec)
 import Toml.Bi.Map (BiMap (..), TomlBiMap, _Array, _Bool, _ByteString, _Day, _Double, _Float,
                     _HashSet, _Int, _IntSet, _Integer, _LByteString, _LText, _LocalTime, _Natural,
                     _NonEmpty, _Read, _Set, _String, _Text, _TextBy, _TimeOfDay, _Word, _ZonedTime)
-import Toml.Bi.Monad (Codec (..))
+import Toml.Bi.Monad (Codec (..), dioptional)
 import Toml.PrefixTree (Key)
 import Toml.Type (AnyValue (..), TOML (..), insertKeyAnyVal, insertTable, insertTableArrays)
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HashMap
-import qualified Toml.PrefixTree as Prefix
 import qualified Data.Text.Lazy as L
+import qualified Toml.PrefixTree as Prefix
 
 
 {- | General function to create bidirectional converters for key-value pairs. In
@@ -287,3 +289,33 @@ list codec key = Codec
   where
     nonEmptyCodec :: TomlCodec (NonEmpty a)
     nonEmptyCodec = nonEmpty codec key
+
+-- {- | Helper typeclass for generic deriving. You can use this typeclass for
+-- writing your custom codecs but this is less convenient and generally not
+-- encouraged.
+-- -}
+-- class HasCodec a where
+--     hasCodec :: Key -> TomlCodec a
+--
+-- instance HasCodec Bool      where hasCodec = bool
+-- instance HasCodec Int       where hasCodec = int
+-- instance HasCodec Word      where hasCodec = word
+-- instance HasCodec Integer   where hasCodec = integer
+-- instance HasCodec Natural   where hasCodec = natural
+-- instance HasCodec Double    where hasCodec = double
+-- instance HasCodec Float     where hasCodec = float
+-- instance HasCodec Text      where hasCodec = text
+-- instance HasCodec L.Text    where hasCodec = lazyText
+-- instance HasCodec ZonedTime where hasCodec = zonedTime
+-- instance HasCodec LocalTime where hasCodec = localTime
+-- instance HasCodec Day       where hasCodec = day
+-- instance HasCodec TimeOfDay where hasCodec = timeOfDay
+-- instance HasCodec IntSet    where hasCodec = arrayIntSet
+--
+-- instance HasCodec a => HasCodec (Maybe a) where
+--     hasCodec = dioptional . hasCodec @a
+--
+-- instance (HasCodec a, KnownNat (IsTomlPrim a)) => HasCodec [a] where
+--     hasCodec = case natVal (Proxy @(IsTomlPrim a)) of
+--         0 -> undefined
+--         n -> undefined

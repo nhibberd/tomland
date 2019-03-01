@@ -51,6 +51,7 @@ library
                            Toml.Bi.Monad
                            Toml.Bi.Map
                          Toml.Edsl
+                         Toml.Generic
                          Toml.Parser
                            Toml.Parser.Core
                            Toml.Parser.String

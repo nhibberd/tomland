@@ -75,6 +75,14 @@ tableP = do
     toml <- subTableContent key
     pure (key, toml)
 
+-- | Parser for a nested table.
+subTableP :: Key -> Parser (Key, TOML)
+subTableP key_ = do
+    key  <- childKeyP key_ tableNameP
+    toml <- subTableContent key
+    pure (key, toml)
+
+
 -- | Parser for an array of tables.
 tableArrayP :: Parser (Key, NonEmpty TOML)
 tableArrayP = do
@@ -84,6 +92,18 @@ tableArrayP = do
     case more of
         Nothing         -> pure (key, localToml :| [])
         Just (_, tomls) -> pure (key, localToml <| tomls)
+
+-- | Parser for an nested array of tables.
+subTableArrayP :: Key -> Parser (Key, NonEmpty TOML)
+subTableArrayP key_ = do
+    key       <- childKeyP key_ tableArrayNameP
+    localToml <- subTableContent key
+    pure (key, localToml :| [])
+--    more      <- optional $ sameKeyP key tableArrayP
+--    case more of
+--        Nothing         -> pure (key, localToml :| [])
+--        Just (_, tomls) -> pure (key, localToml <| tomls)
+
 
 -- | Parser for a '.toml' file
 tomlP :: Parser TOML
@@ -97,7 +117,7 @@ tomlP = do
     pure TOML
         { tomlPairs       = HashMap.fromList val
         , tomlTables      = fromList $ inline ++ table
-        , tomlTableArrays = HashMap.fromList array
+        , tomlTableArrays = HashMap.fromListWith (<>) array
         }
 
 -- | Parser for full 'TOML' under a certain key
@@ -106,22 +126,21 @@ subTableContent key = do
     (val, inline)  <- distributeEithers <$> many hasKeyP
     (table, array) <- fmap distributeEithers
         $ many
-        $ childKeyP key
-        $ eitherPairP (try tableP) tableArrayP
+        $ eitherPairP (try (subTableP key)) (subTableArrayP key)
 
     pure TOML
         { tomlPairs       = HashMap.fromList val
         , tomlTables      = fromList $ inline ++ table
-        , tomlTableArrays = HashMap.fromList array
+        , tomlTableArrays = HashMap.fromListWith (<>) array
         }
 
 -- | @childKeyP key p@ returns the result of @p@ if the key returned by @p@ is
 -- a child key of the @key@, and fails otherwise.
-childKeyP :: Key -> Parser (Key, a) -> Parser (Key, a)
+childKeyP :: Key -> Parser Key -> Parser Key
 childKeyP key p = try $ do
-    (k, x) <- p
+    k <- p
     case keysDiff key k of
-        FstIsPref k' -> pure (k', x)
+        FstIsPref k' -> pure k'
         _            -> fail $ show k ++ " is not a child key of " ++ show key
 
 -- | @sameKeyP key p@ returns the result of @p@ if the key returned by @p@ is
